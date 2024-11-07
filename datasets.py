@@ -97,7 +97,14 @@ def generate_concentric_circles(n_samples=1000, n_classes=3, noise=0.05, factor=
     for class_num in range(n_classes):
         # Adjust factor for each class to create concentric circles
         current_factor = factor * (class_num + 1) / n_classes
-        X_class, _ = make_circles(n_samples=n_samples_per_class, noise=noise, factor=current_factor)
+        thetas = np.random.rand(n_samples_per_class) * 2 * np.pi
+        
+        X_class = np.column_stack((
+            current_factor * np.cos(thetas),
+            current_factor * np.sin(thetas)
+        ))
+        X_class += noise * np.random.rand(*X_class.shape)
+        
         X.extend(X_class)
         y.extend([class_num] * n_samples_per_class)
     X = np.array(X)
