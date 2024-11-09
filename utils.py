@@ -75,6 +75,43 @@ def sum_mutual_information(X, num_bins=10, eps=1e-10, device='cpu'):
 
     return total_mi.item()
 
+def schedule_or_const(x):
+    """
+    Convert a schedule or constant value into a callable function that returns the mi_weight for a given epoch.
+
+    Args:
+        x (float, int, list, tuple, callable, _LRScheduler): 
+            - float or int: constant mi_weight
+            - list or tuple: mi_weight per epoch
+            - callable: function that takes epoch (int) and returns mi_weight (float)
+            - PyTorch Scheduler: instance of torch.optim.lr_scheduler._LRScheduler
+
+    Returns:
+        A callable that takes epoch (int) and returns mi_weight (float)
+
+    Raises:
+        ValueError: If `x` is not one of the supported types.
+    """
+    if isinstance(x, (float, int)):
+        # Constant mi_weight
+        return lambda epoch: x
+
+    elif isinstance(x, (list, tuple)):
+        # List or tuple schedule
+        def get_from_list(epoch):
+            if epoch < len(x):
+                return x[epoch]
+            else:
+                # If epoch exceeds the schedule length, return the last value
+                return x[-1]
+        return get_from_list
+
+    elif callable(x):
+        # Callable schedule
+        return x
+    else:
+        raise ValueError("Unsupported type for schedule_or_const. Supported types are: float, int, list, tuple, callable, and torch.optim.lr_scheduler._LRScheduler.")
+
 def train_model(model, train_loader, criterion, optimizer, num_epochs=10, l1_weight=1e-5, device='cpu'):
     model.to(device)
     for epoch in range(num_epochs):
@@ -117,6 +154,8 @@ def train_autoencoder(model, train_loader, criterion, optimizer, num_epochs=50, 
     # Move model to device
     model = model.to(device)
 
+    mi_weight_func = schedule_or_const(mi_weight)
+    l1_weight_func = schedule_or_const(l1_weight)
     # Training loop
     for epoch in range(num_epochs):
         model.train()
@@ -136,11 +175,11 @@ def train_autoencoder(model, train_loader, criterion, optimizer, num_epochs=50, 
 
             # Compute mutual information loss
             mi_total = sum_mutual_information(latent, device=device)
-            mi_loss = mi_weight * torch.tensor(mi_total, dtype=torch.float32, device=device)
+            mi_loss = mi_weight_func(epoch) * torch.tensor(mi_total, dtype=torch.float32, device=device)
 
-            l1_loss = l1_weight * sum(p.abs().sum() for p in model.parameters())
+            l1_loss = l1_weight_func(epoch) * sum(p.abs().sum() for p in model.parameters())
             # Total loss: reconstruction + mi_weight * mutual information
-            loss = recon_loss + mi_loss + l1_loss
+            loss = recon_loss - mi_loss + l1_loss
 
             # Backward pass and optimization
             optimizer.zero_grad()
