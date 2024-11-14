@@ -31,3 +31,23 @@ class FeedForwardNetwork(nn.Module):
                 x = layer(x)
         
         return x
+    
+    def get_layer_outputs(self, x):
+        """
+        Collects and returns outputs at each layer in the network for the input dataset.
+        
+        Arguments:
+            x (torch.Tensor): The input dataset as a tensor.
+        
+        Returns:
+            list[torch.Tensor]: A list of outputs at each layer in the network.
+        """
+        layer_outputs = []
+        for layer in self.hidden_layers:
+            if isinstance(layer, layers.InteractionLayer):
+                x = torch.cat((x, layer(x)), dim=1)
+            else:
+                x = layer(x)
+            layer_outputs.append(x)  # Store the output of the current layer
+        
+        return layer_outputs

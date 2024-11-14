@@ -56,3 +56,23 @@ class InteractionLayer(nn.Module):
         
         # `interactions` will have shape (batch_size, num_interactions)
         return interactions
+    
+
+class SquareLayer(nn.Module):
+    """
+    A layer that applies weights and biases to the input,
+    then computes squared and interaction terms.
+    Output Size: N(N+1)/2
+    """
+    def __init__(self, input_dim):
+        super(SquareLayer, self).__init__()
+        self.input_dim = input_dim
+        self.weights = nn.Parameter(torch.randn(input_dim))  # Learnable weights
+        self.biases = nn.Parameter(torch.randn(input_dim))   # Learnable biases
+
+    def forward(self, x):
+        # x has shape (batch_size, input_dim)
+        
+        # Apply weights and biases to the input
+        weighted_input = x * self.weights + self.biases
+        return torch.pow(weighted_input, 2)
