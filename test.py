@@ -13,10 +13,14 @@ from torch.utils.data import TensorDataset, DataLoader
 # y = torch.Tensor(y).unsqueeze(1)
 X, y = datasets.generate_concentric_circles(n_classes=2)
 #X = X[:,1:].astype('float')
-datasets.plot_dataset(X, y)
-X = torch.Tensor(X)
+X = torch.Tensor(X) + 15
 y = torch.Tensor(y)
+
+datasets.plot_dataset(X, y)
+
 y = torch.stack((y == 0, y == 1), dim=1).float()
+
+
 
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
