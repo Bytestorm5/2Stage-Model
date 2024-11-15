@@ -11,10 +11,10 @@ from torch.utils.data import TensorDataset, DataLoader
 # X, y = datasets.generate_concentric_circles(factor=1, n_classes=2, noise=0.3)
 # X = torch.Tensor(X)
 # y = torch.Tensor(y).unsqueeze(1)
-X, y = get_data(464)
+X, y = datasets.generate_concentric_circles(n_classes=2)
 #X = X[:,1:].astype('float')
 datasets.plot_dataset(X, y)
-X = torch.Tensor(X)
+X = torch.Tensor(X) + 15
 y = torch.Tensor(y)
 
 dataset = TensorDataset(X, y)
@@ -23,13 +23,14 @@ dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 model = models.feedforward.FeedForwardNetwork(
     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-    layer_spec=[100, 30, 256, 30]
+    layer_spec=['linear_transform', 'interact', 5]
 )
+model.hidden_layers[0].initialize_parameters(X)
 
 criterion = nn.MSELoss()
 
 # Define Adam optimizer with the model parameters
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.01)
 
 # Train the model using train_model function
 utils.train_model(
@@ -42,7 +43,108 @@ utils.train_model(
     device='cpu'
 )
 model.eval()
-datasets.plot_model_predictions(model, X, y)
+layer_outs = model.get_layer_outputs(X)
+
+import matplotlib as mpl
+mpl.rcParams['figure.dpi'] = 80
+
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+import numpy as np
+import math
+
+def plot_layer_outputs(layer_outputs, y):
+    """
+    Plots the outputs from each layer in the network:
+        - Uses PCA if output dimensions > 2.
+        - Plots directly if output dimensions == 2.
+        - Uses overlaid histograms if output dimensions == 1.
+    
+    Arguments:
+        layer_outputs (list[torch.Tensor]): A list of outputs at each layer in the network.
+        y (torch.Tensor or np.ndarray): Labels (0 or 1) to color the points or histograms accordingly.
+    """
+    y = y.detach().cpu().numpy() if isinstance(y, torch.Tensor) else y
+
+    num_layers = len(layer_outputs)
+    cols = 3  # Number of columns in the grid
+    rows = math.ceil(num_layers / cols)  # Determine rows based on number of layers
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 4 * rows), squeeze=False)
+    axes = axes.flatten()  # Flatten the axes array for easy iteration
+    
+    for idx, output in enumerate(layer_outputs):
+        # Convert the tensor to a NumPy array
+        output_np = output.detach().cpu().numpy()
+        output_dim = output_np.shape[1]  # Get the dimensionality of the output
+        
+        ax = axes[idx]
+        
+        if output_dim > 2:
+            # Apply PCA to reduce the dimensionality to 2D
+            pca = PCA(n_components=2)
+            transformed_output = pca.fit_transform(output_np)
+            explained_variance = sum(pca.explained_variance_ratio_) * 100
+            
+            # Scatter plot with PCA
+            scatter = ax.scatter(
+                transformed_output[:, 0], 
+                transformed_output[:, 1], 
+                c=y, 
+                cmap='viridis', 
+                alpha=0.6
+            )
+            ax.set_title(f"Layer {idx} - PCA (Expl. Var.: {explained_variance:.2f}%)")
+            ax.set_xlabel("Principal Component 1")
+            ax.set_ylabel("Principal Component 2")
+            ax.grid(True)
+        
+        elif output_dim == 2:
+            # Direct scatter plot without PCA
+            scatter = ax.scatter(
+                output_np[:, 0], 
+                output_np[:, 1], 
+                c=y, 
+                cmap='viridis', 
+                alpha=0.6
+            )
+            ax.set_title(f"Layer {idx} - 2D Output")
+            ax.set_xlabel("Dimension 1")
+            ax.set_ylabel("Dimension 2")
+            ax.grid(True)
+        
+        elif output_dim == 1:
+            # Overlaid histograms for 1D output
+            output_class_0 = output_np[y == 0]
+            output_class_1 = output_np[y == 1]
+            
+            ax.hist(output_class_0.squeeze(), bins=30, alpha=0.7, color='blue', label='Class 0', edgecolor='black')
+            ax.hist(output_class_1.squeeze(), bins=30, alpha=0.7, color='orange', label='Class 1', edgecolor='black')
+            ax.set_title(f"Layer {idx} - 1D Output")
+            ax.set_xlabel("Output Value")
+            ax.set_ylabel("Frequency")
+            ax.legend()
+        
+        else:
+            ax.text(0.5, 0.5, "Unsupported Dim", horizontalalignment='center', verticalalignment='center')
+        
+    # Hide any unused subplots
+    for ax in axes[len(layer_outputs):]:
+        ax.axis('off')
+    
+    # Add a single color bar for scatter plots if at least one scatter exists
+    # scatter_exists = any(output.detach().cpu().numpy().shape[1] >= 2 for output in layer_outputs)
+    # if scatter_exists:
+    #     cbar = fig.colorbar(scatter, ax=axes, location='right', shrink=0.8, pad=0.1)
+    #     cbar.set_label('Class Label')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+        
+plot_layer_outputs(layer_outs, y)
+
 # y_pred = y_pred.detach().numpy().reshape((y_pred.shape[0], ))
 
 # import numpy as np

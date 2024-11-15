@@ -49,5 +49,4 @@ class FeedForwardNetwork(nn.Module):
             else:
                 x = layer(x)
             layer_outputs.append(x)  # Store the output of the current layer
-        
         return layer_outputs
