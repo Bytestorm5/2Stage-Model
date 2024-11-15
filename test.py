@@ -14,8 +14,9 @@ from torch.utils.data import TensorDataset, DataLoader
 X, y = datasets.generate_concentric_circles(n_classes=2)
 #X = X[:,1:].astype('float')
 datasets.plot_dataset(X, y)
-X = torch.Tensor(X) + 15
+X = torch.Tensor(X)
 y = torch.Tensor(y)
+y = torch.stack((y == 0, y == 1), dim=1).float()
 
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
@@ -25,9 +26,9 @@ model = models.feedforward.FeedForwardNetwork(
     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
     layer_spec=['linear_transform', 'interact', 5]
 )
-model.hidden_layers[0].initialize_parameters(X)
+model.hidden_layers.append(nn.Sigmoid())
 
-criterion = nn.MSELoss()
+criterion = nn.CrossEntropyLoss()
 
 # Define Adam optimizer with the model parameters
 optimizer = optim.Adam(model.parameters(), lr=0.01)
@@ -43,7 +44,6 @@ utils.train_model(
     device='cpu'
 )
 model.eval()
-layer_outs = model.get_layer_outputs(X)
 
 import matplotlib as mpl
 mpl.rcParams['figure.dpi'] = 80
@@ -53,7 +53,7 @@ from sklearn.decomposition import PCA
 import numpy as np
 import math
 
-def plot_layer_outputs(layer_outputs, y):
+def plot_layer_outputs(model, X, y):
     """
     Plots the outputs from each layer in the network:
         - Uses PCA if output dimensions > 2.
@@ -65,7 +65,10 @@ def plot_layer_outputs(layer_outputs, y):
         y (torch.Tensor or np.ndarray): Labels (0 or 1) to color the points or histograms accordingly.
     """
     y = y.detach().cpu().numpy() if isinstance(y, torch.Tensor) else y
-
+    y = y[:, 0]
+    # List of outputs at each layer
+    layer_outputs = model.get_layer_outputs(X)
+    
     num_layers = len(layer_outputs)
     cols = 3  # Number of columns in the grid
     rows = math.ceil(num_layers / cols)  # Determine rows based on number of layers
@@ -74,6 +77,7 @@ def plot_layer_outputs(layer_outputs, y):
     axes = axes.flatten()  # Flatten the axes array for easy iteration
     
     for idx, output in enumerate(layer_outputs):
+        layer_class_name = type(model.hidden_layers[idx]).__name__
         # Convert the tensor to a NumPy array
         output_np = output.detach().cpu().numpy()
         output_dim = output_np.shape[1]  # Get the dimensionality of the output
@@ -94,7 +98,7 @@ def plot_layer_outputs(layer_outputs, y):
                 cmap='viridis', 
                 alpha=0.6
             )
-            ax.set_title(f"Layer {idx} - PCA (Expl. Var.: {explained_variance:.2f}%)")
+            ax.set_title(f"Layer {idx} ({layer_class_name}) - PCA (Expl. Var.: {explained_variance:.2f}%)")
             ax.set_xlabel("Principal Component 1")
             ax.set_ylabel("Principal Component 2")
             ax.grid(True)
@@ -108,7 +112,7 @@ def plot_layer_outputs(layer_outputs, y):
                 cmap='viridis', 
                 alpha=0.6
             )
-            ax.set_title(f"Layer {idx} - 2D Output")
+            ax.set_title(f"Layer {idx} ({layer_class_name}) - 2D Output")
             ax.set_xlabel("Dimension 1")
             ax.set_ylabel("Dimension 2")
             ax.grid(True)
@@ -120,7 +124,7 @@ def plot_layer_outputs(layer_outputs, y):
             
             ax.hist(output_class_0.squeeze(), bins=30, alpha=0.7, color='blue', label='Class 0', edgecolor='black')
             ax.hist(output_class_1.squeeze(), bins=30, alpha=0.7, color='orange', label='Class 1', edgecolor='black')
-            ax.set_title(f"Layer {idx} - 1D Output")
+            ax.set_title(f"Layer {idx} ({layer_class_name}) - 1D Output")
             ax.set_xlabel("Output Value")
             ax.set_ylabel("Frequency")
             ax.legend()
@@ -143,7 +147,7 @@ def plot_layer_outputs(layer_outputs, y):
 
 
         
-plot_layer_outputs(layer_outs, y)
+plot_layer_outputs(model, X, y)
 
 # y_pred = y_pred.detach().numpy().reshape((y_pred.shape[0], ))
 
