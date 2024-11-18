@@ -88,6 +88,27 @@ class SquareLayer(nn.Module):
         weighted_input = torch.pow(self.lin(x), 2)
         return weighted_input
     
+class SquareActivation(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    def forward(self, x):
+        return torch.pow(x, 2)
+    
+class AbsActivation(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    def forward(self, x):
+        return torch.abs(x)
+    
+class GaussActivation(nn.Module):
+    def __init__(self, num_features) -> None:
+        super().__init__()
+        self.m = nn.Parameter(torch.zeros(num_features))
+        self.s = nn.Parameter(torch.ones(num_features))
+    def forward(self, x):
+        z = (x - self.m) / self.s
+        return torch.exp(-torch.pow(z, 2))
+    
 class LinearTransformLayer(nn.Module):
     def __init__(self, num_features):
         super(LinearTransformLayer, self).__init__()
@@ -118,3 +139,51 @@ class LinearTransformLayer(nn.Module):
 
         # Apply the linear transformation mx + b
         return self.m * x + self.b
+
+class CompositeLayer(nn.Module):
+    """
+    A layer that combines multiple dense layers followed by different modules,
+    concatenating their outputs into a single vector.
+    Each tuple in the specification list consists of:
+        - int: Number of outputs for the dense layer
+        - nn.Module: A module to apply to the outputs of the dense layer
+    """
+    def __init__(self, input_dim, specs):
+        """
+        Initialize the CompositeLayer.
+        
+        Args:
+            input_dim (int): The input dimension to the layer.
+            specs (list of tuples): Each tuple contains:
+                - int: Number of outputs for the dense layer
+                - nn.Module: A module to apply to the dense layer's output
+        """
+        super(CompositeLayer, self).__init__()
+        
+        self.sub_layers = nn.ModuleList()
+        
+        for num_outputs, module in specs:
+            self.sub_layers.append(
+                nn.Sequential(
+                    nn.Linear(input_dim, num_outputs),
+                    module
+                )
+            )
+
+    def forward(self, x):
+        """
+        Forward pass of the CompositeLayer.
+        
+        Args:
+            x (Tensor): Input tensor of shape (batch_size, input_dim).
+        
+        Returns:
+            Tensor: Concatenated output of all sub-layers.
+        """
+        outputs = []
+        
+        for layer in self.sub_layers:
+            outputs.append(layer(x))  # Apply each sub-layer sequentially
+        
+        # Concatenate all outputs along the feature dimension
+        return torch.cat(outputs, dim=-1)
