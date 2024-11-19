@@ -347,31 +347,3 @@ def generate_intersecting_rings(n_samples, n_classes, noise=0.05, radius_increme
     X = np.array(X)
     y = np.array(y)
     return X, y
-
-def generate_taylor_series_data(n_samples=1000, x_range=(-2 * np.pi, 2 * np.pi), order=1, noise=0.1):
-    """
-    Generate dataset based on the Taylor series expansion of sine function.
-
-    Parameters:
-    - n_samples: Number of samples to generate.
-    - x_range: Tuple (min, max) defining the range of x values.
-    - order: Maximum order of the Taylor series expansion.
-    - noise: Standard deviation of Gaussian noise added to the data.
-
-    Returns:
-    - X: Feature matrix, where each row is [x, x^2, x^3, ..., x^order].
-    - y: Labels corresponding to the sine values of x (with optional noise).
-    """
-    # Generate random x values within the specified range
-    x_values = np.random.uniform(x_range[0], x_range[1], n_samples)
-
-    # Compute true sine values
-    y_true = np.sin(x_values)
-
-    # Add noise to sine values
-    y_noisy = y_true + np.random.normal(0, noise, n_samples)
-
-    # Create feature matrix X with powers of x
-    X = np.column_stack([x_values**i for i in range(1, order + 1)])
-    
-    return X, y_noisy

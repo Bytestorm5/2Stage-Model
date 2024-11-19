@@ -8,25 +8,19 @@ import models.feedforward
 import utils
 from torch.utils.data import TensorDataset, DataLoader
 
-import matplotlib as mpl
-mpl.rcParams['figure.dpi'] = 80
-
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-import numpy as np
-import math
-
 # X, y = datasets.generate_concentric_circles(factor=1, n_classes=2, noise=0.3)
 # X = torch.Tensor(X)
 # y = torch.Tensor(y).unsqueeze(1)
-X, y = datasets.generate_taylor_series_data(noise=0, x_range=(-10, 10), order=10)
+X, y = datasets.generate_concentric_circles(n_classes=2)
 #X = X[:,1:].astype('float')
-X = torch.Tensor(X)
+X = torch.Tensor(X) + 15
 y = torch.Tensor(y)
 
 datasets.plot_dataset(X, y)
-# plt.scatter(X, y)
-# plt.show()
+
+y = torch.stack((y == 0, y == 1), dim=1).float()
+
+
 
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
@@ -34,10 +28,11 @@ dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 model = models.feedforward.FeedForwardNetwork(
     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-    layer_spec=['interact', 128, 32]
+    layer_spec=['linear_transform', 'interact', 5]
 )
+model.hidden_layers.append(nn.Sigmoid())
 
-criterion = nn.SmoothL1Loss()
+criterion = nn.CrossEntropyLoss()
 
 # Define Adam optimizer with the model parameters
 optimizer = optim.Adam(model.parameters(), lr=0.01)
@@ -54,8 +49,13 @@ utils.train_model(
 )
 model.eval()
 
-y_pred = model(X).detach().numpy()
-datasets.plot_dataset(X, y_pred)
+import matplotlib as mpl
+mpl.rcParams['figure.dpi'] = 80
+
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+import numpy as np
+import math
 
 def plot_layer_outputs(model, X, y):
     """
@@ -69,7 +69,7 @@ def plot_layer_outputs(model, X, y):
         y (torch.Tensor or np.ndarray): Labels (0 or 1) to color the points or histograms accordingly.
     """
     y = y.detach().cpu().numpy() if isinstance(y, torch.Tensor) else y
-    #y = y[:, 0]
+    y = y[:, 0]
     # List of outputs at each layer
     layer_outputs = model.get_layer_outputs(X)
     
@@ -123,8 +123,8 @@ def plot_layer_outputs(model, X, y):
         
         elif output_dim == 1:
             # Overlaid histograms for 1D output
-            output_class_0 = y
-            output_class_1 = output_np
+            output_class_0 = output_np[y == 0]
+            output_class_1 = output_np[y == 1]
             
             ax.hist(output_class_0.squeeze(), bins=30, alpha=0.7, color='blue', label='Class 0', edgecolor='black')
             ax.hist(output_class_1.squeeze(), bins=30, alpha=0.7, color='orange', label='Class 1', edgecolor='black')
