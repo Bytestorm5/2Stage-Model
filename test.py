@@ -5,6 +5,7 @@ import datasets
 from data.uci_data import get_data
 import models
 import models.feedforward
+import models.generic
 import utils
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -25,12 +26,28 @@ y = torch.stack((y == 0, y == 1), dim=1).float()
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 
-model = models.feedforward.FeedForwardNetwork(
-    input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
-    output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-    layer_spec=['linear_transform', 'interact', 5]
-)
-model.hidden_layers.append(nn.Sigmoid())
+# model = models.feedforward.FeedForwardNetwork(
+#     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
+#     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
+#     layer_spec=['linear_transform', 10]
+# )
+# model.hidden_layers.append(nn.Sigmoid())
+
+import torch.nn as nn
+import models.layers
+model = models.generic.GenericNetwork()
+model.hidden_layers.extend([
+    models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
+    models.layers.CompositeLayer(2, [
+        (5, nn.ReLU(True)), 
+        (5, models.layers.SquareActivation()), 
+        (5, models.layers.AbsActivation()), 
+        (5, models.layers.GaussActivation(5))
+    ]),
+    nn.Linear(20, y.shape[1] if len(y.shape) > 1 else 1),
+    nn.Sigmoid()
+])
+
 
 criterion = nn.CrossEntropyLoss()
 
@@ -48,6 +65,9 @@ utils.train_model(
     device='cpu'
 )
 model.eval()
+
+for name, param in model.named_parameters():
+    print(name, param.shape, param)
 
 import matplotlib as mpl
 mpl.rcParams['figure.dpi'] = 80
