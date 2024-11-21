@@ -187,3 +187,53 @@ class CompositeLayer(nn.Module):
         
         # Concatenate all outputs along the feature dimension
         return torch.cat(outputs, dim=-1)
+    
+class CompositeActivation(nn.Module):
+    """
+    A layer that takes a list of modules (e.g., activations or transformations),
+    partitions the input across them, applies each module to its respective
+    partition, and combines the results to produce an output of the same shape as the input.
+    """
+    def __init__(self, modules):
+        """
+        Initialize the CompositeActivation layer.
+
+        Args:
+            modules (list of nn.Module): A list of modules to apply to partitions of the input.
+        """
+        super(CompositeActivation, self).__init__()
+        self.module_list = nn.ModuleList(modules)
+
+    def forward(self, x):
+        """
+        Forward pass of the CompositeActivation layer.
+
+        Args:
+            x (Tensor): Input tensor of shape (batch_size, input_dim).
+
+        Returns:
+            Tensor: Output tensor of the same shape as the input.
+        """
+        num_modules = len(self.module_list)
+        input_dim = x.size(1)
+
+        # Compute the base partition size
+        partition_size = input_dim // num_modules
+        remainder = input_dim % num_modules
+
+        # Partition the input, handling leftovers by including them in the last partition
+        partitions = []
+        start_idx = 0
+        for i in range(num_modules):
+            end_idx = start_idx + partition_size + (1 if i < remainder else 0)
+            partitions.append(x[:, start_idx:end_idx])
+            start_idx = end_idx
+
+        # Apply each module to its corresponding partition
+        processed_partitions = [
+            module(partition) for module, partition in zip(self.module_list, partitions)
+        ]
+
+        # Concatenate the processed partitions to form the output
+        return torch.cat(processed_partitions, dim=1)
+

@@ -45,17 +45,32 @@ dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 # model = models.generic.GenericNetwork()
 # model.hidden_layers.extend([
 #     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
-#     models.layers.CompositeLayer(2, [
-#         (5, models.layers.SquareActivation()), 
-#     ]),
+#     nn.Linear(2, 5),
+#     models.layers.AbsActivation(),
+#     nn.Linear(5, 5),
+#     models.layers.AbsActivation(),
+#     nn.Linear(5, 5),
+#     models.layers.AbsActivation(),
 #     nn.Linear(5, y.shape[1] if len(y.shape) > 1 else 1),
 #     nn.Sigmoid()
 # ])
-model = models.feedforward.FeedForwardNetwork(
-    input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
-    output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-    layer_spec=[5]
-)
+# model = models.feedforward.FeedForwardNetwork(
+#     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
+#     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
+#     layer_spec=[5]
+# )
+model = models.generic.GenericNetwork()
+model.hidden_layers.extend([
+    models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
+    nn.Linear(2, 5),
+    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
+    nn.Linear(5, 10),
+    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
+    nn.Linear(10, 5),
+    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
+    nn.Linear(5, 2),
+    nn.Sigmoid()
+])
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
@@ -96,6 +111,8 @@ def plot_layer_outputs(model, X, y):
         y (torch.Tensor or np.ndarray): Labels (0 or 1) to color the points or histograms accordingly.
     """
     y = y.detach().cpu().numpy() if isinstance(y, torch.Tensor) else y
+    if len(y.shape) > 1:
+        y = np.argmax(y, axis=1)
     #y = y[:, 0]
     # List of outputs at each layer
     layer_outputs = model.get_layer_outputs(X)

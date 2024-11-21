@@ -6,6 +6,7 @@ from data.uci_data import get_data
 import models
 import models.generic
 import models.feedforward
+import models.layers
 import utils
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -24,12 +25,18 @@ dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 #     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
 #     layer_spec=[100, 30, 256, 30]
 # )
-model = models.feedforward.FeedForwardNetwork(
-    input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
-    output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-    layer_spec=[5]
-)
-model.hidden_layers.append(nn.Sigmoid())
+model = models.generic.GenericNetwork()
+model.hidden_layers.extend([
+    models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
+    nn.Linear(2, 5),
+    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
+    nn.Linear(5, 10),
+    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
+    nn.Linear(10, 5),
+    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
+    nn.Linear(5, 2),
+    nn.Sigmoid()
+])
 # model = models.generic.GenericNetwork()
 # model.hidden_layers.extend([
 #     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
