@@ -4,39 +4,69 @@ import models.autoencoder
 from thop.profile import register_hooks
 
 import models.layers
+import models.generic
 
 import torchvision.models as tmodels
 
-def interactionlayer_flops(module, input, output):
-    """
-    Calculate FLOPs for InteractionLayer.
-    
-    Args:
-        module: The InteractionLayer instance.
-        input: Input tensor to the layer.
-        output: Output tensor from the layer.
-    
-    Returns:
-        (macs, params): Tuple containing MACs and params.
-    """
-    # Extract input dimensions
-    batch_size, input_dim = input[0].size()
-    
-    # Compute FLOPs for torch.bmm(x.unsqueeze(2), x.unsqueeze(1))
-    # torch.bmm: For each batch, multiply (input_dim x 1) with (1 x input_dim)
-    # FLOPs per batch = 2 * input_dim * input_dim (1 multiply and 1 add per element)
-    # Total FLOPs = batch_size * 2 * input_dim^2
-    flops = 2 * input_dim * input_dim * batch_size
-    
-    # No parameters in InteractionLayer
-    # module.total_params += 0
-    
+def interaction_flops(module, input, output):
+    # Example: Outer product FLOPs
+    input_dim = input[0].numel()
+    flops = input_dim * input_dim  # Outer product FLOPs
     module.total_ops += flops
     
-    #return flops, params
+def abs_activation_flops(module, input, output):
+    num_features = input[0].numel()
+    module.total_ops += num_features
+
+def gauss_activation_flops(module, input, output):
+    num_features = input[0].numel()
+    # (x - m)
+    # z / s (add + mul; 1 flop)
+    # z^2 (mul; 1 flop)
+    # exp(-z^2) (mul; 1 flop) + (exp; 15 flops)
+    module.total_ops += num_features * 18
+
+def composite_layer_flops(module: models.layers.CompositeLayer, input, output):
+    x = input[0]
+    total_flops = 0
+    for layer in module.sub_layers:
+        # Call custom handlers for specific layers
+        layer_flops = register_hooks[layer.__class__](layer, x, output)
+        total_flops += layer.total_ops
+    module.total_ops += total_flops
+
+def sequential_flops(module: torch.nn.Sequential, input, output):
+    x = input[0]
+    total_flops = 0
+    for layer in module._modules.values():
+        # Call custom handlers for specific layers
+        o = layer(x)
+        layer_flops = register_hooks[layer.__class__](layer, x, o)
+        total_flops += layer.total_ops
+        x = o  # Forward pass to update x
+    module.total_ops += total_flops
+
+def generic_network_flops(module: models.generic.GenericNetwork, input, output):
+    x = input[0]
+    total_flops = 0
+    for layer in module.hidden_layers:
+        # Call custom handlers for specific layers
+        o = layer(x)
+        layer_flops = register_hooks[layer.__class__](layer, x, o)
+        total_flops += layer.total_ops
+        x = o  # Forward pass to update x
+    module.total_ops += total_flops
 
 # Register the custom handler with thop
-register_hooks[models.layers.InteractionLayer] = interactionlayer_flops
+register_hooks[models.layers.InteractionLayer] = interaction_flops
+# Square and abs are equivalent here
+register_hooks[models.layers.SquareActivation] = abs_activation_flops
+register_hooks[models.layers.AbsActivation] = abs_activation_flops
+register_hooks[models.layers.LinearTransformLayer] = abs_activation_flops
+register_hooks[models.layers.GaussActivation] = gauss_activation_flops
+register_hooks[models.layers.CompositeLayer] = composite_layer_flops
+register_hooks[models.generic.GenericNetwork] = generic_network_flops
+register_hooks[torch.nn.Sequential] = sequential_flops
 
 
 # Define your model (e.g., ResNet18)
@@ -51,6 +81,7 @@ import torch.optim as optim
 import datasets
 from data.uci_data import get_data
 import models
+import models.generic
 import models.feedforward
 import utils
 from torch.utils.data import TensorDataset, DataLoader
@@ -58,23 +89,39 @@ from torch.utils.data import TensorDataset, DataLoader
 # X, y = datasets.generate_concentric_circles(factor=1, n_classes=2, noise=0.3)
 # X = torch.Tensor(X)
 # y = torch.Tensor(y).unsqueeze(1)
-X, y = get_data(464)
+X, y = datasets.generate_concentric_circles(n_classes=2)
 #X = X[:,1:].astype('float')
-#datasets.plot_dataset(X, y)
-X = torch.Tensor(X)
+X = torch.Tensor(X) + 15
 y = torch.Tensor(y)
-
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 
+# model = models.feedforward.FeedForwardNetwork(
+#     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
+#     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
+#     layer_spec=[100, 30, 256, 30]
+# )
 model = models.feedforward.FeedForwardNetwork(
     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-    layer_spec=[100, 30, 256, 30]
+    layer_spec=[5]
 )
+model.hidden_layers.append(nn.Sigmoid())
+# model = models.generic.GenericNetwork()
+# model.hidden_layers.extend([
+#     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
+#     models.layers.CompositeLayer(2, [
+#         (5, nn.ReLU(True)), 
+#         (5, models.layers.SquareActivation()), 
+#         (5, models.layers.AbsActivation()), 
+#         (5, models.layers.GaussActivation(5))
+#     ]),
+#     nn.Linear(20, y.shape[1] if len(y.shape) > 1 else 1),
+#     nn.Sigmoid()
+# ])
 
 # Create a dummy input tensor matching the input size
-input = torch.randn(1, 81).to(next(model.parameters()).device)
+input = torch.randn(1000, 2).to(next(model.parameters()).device)
 
 # Profile the model
 macs, params = profile(model, inputs=(input, ), verbose=True)
