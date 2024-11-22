@@ -33,11 +33,18 @@ for name in tqdm(model_names):
         
         # Append data for plotting
         model_list.append(name)
-        param_list.append(total_params / (1000**2))  # Convert to millions
-        flop_list.append(total_ops / (1000**3))  # Convert to billions
+        param_list.append(total_params)  # Convert to millions
+        flop_list.append(total_ops)  # Convert to billions
 
     except Exception as e:
         pass  # Ignore models that fail to process
+
+import csv
+with open("famous_models.csv", "w", newline="") as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(["Model Name", "Parameters", "FLOPs"])
+    for row in zip(model_list, param_list, flop_list):
+        writer.writerow(row)
 
 # Plot FLOPs vs Parameters
 plt.figure(figsize=(10, 6))
@@ -46,7 +53,7 @@ for i, model_name in enumerate(model_list):
     plt.text(param_list[i], flop_list[i], model_name, fontsize=8)
 
 plt.title("FLOPs vs Parameters for Torchvision Models")
-plt.xlabel("Parameters (Millions)")
-plt.ylabel("FLOPs (Billions)")
+plt.xlabel("Parameters")
+plt.ylabel("FLOPs")
 plt.grid(True)
 plt.show()

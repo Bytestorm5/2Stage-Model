@@ -375,3 +375,29 @@ def generate_taylor_series_data(n_samples=1000, x_range=(-2 * np.pi, 2 * np.pi),
     X = np.column_stack([x_values**i for i in range(1, order + 1)])
     
     return X, y_noisy
+
+def generate_circle(n_samples=1000, radius=1.0):
+    """Generate points classified as inside (1) or outside (0) of a circle."""
+    X = np.random.uniform(-radius * 1.5, radius * 1.5, (n_samples, 2))
+    y = (np.sqrt(X[:, 0]**2 + X[:, 1]**2) < radius).astype(int)
+    return X, y
+
+def generate_sine_wave(n_samples=1000):
+    """Generate points classified as above (1) or below (0) a sine wave."""
+    X = np.random.uniform(-1.5, 1.5, (n_samples, 2))
+    y = (X[:, 1] > np.sin(2 * np.pi * X[:, 0])).astype(int)
+    return X, y
+
+def generate_checkerboard(n_samples=1000, grid_size=4):
+    """Generate points classified in a checkerboard pattern."""
+    X = np.random.uniform(-1.5, 1.5, (n_samples, 2))
+    y = ((np.floor(X[:, 0] * grid_size) + np.floor(X[:, 1] * grid_size)) % 2 == 0).astype(int)
+    return X, y
+
+def generate_spiral(n_samples=1000):
+    """Generate points classified based on a spiral pattern."""
+    X = np.random.uniform(-1.5, 1.5, (n_samples, 2))
+    r = np.sqrt(X[:, 0]**2 + X[:, 1]**2)
+    angle = np.arctan2(X[:, 1], X[:, 0])
+    y = (angle > np.pi * r).astype(int)
+    return X, y

@@ -12,8 +12,10 @@ import models.feedforward
 import models.generic
 import utils
 
-X, y = datasets.generate_concentric_circles(n_classes=2, noise=0.25)
-X = torch.Tensor(X) + 15
+#X, y = datasets.generate_concentric_circles(n_classes=2, noise=0.15)
+#X = torch.Tensor(X) + 15
+X, y = datasets.generate_sine_wave()
+X = torch.Tensor(X)
 y = torch.Tensor(y)
 
 datasets.plot_dataset(X, y)
@@ -23,57 +25,21 @@ y = torch.stack((y == 0, y == 1), dim=1).float()
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 
-# model = models.feedforward.FeedForwardNetwork(
-#     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
-#     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-#     layer_spec=[10, 30, 10]
-# )
-# model.hidden_layers.append(nn.Sigmoid())
-
-# model = models.generic.GenericNetwork()
-# model.hidden_layers.extend([
-#     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
-#     models.layers.CompositeLayer(2, [
-#         (5, nn.ReLU(True)), 
-#         (5, models.layers.SquareActivation()), 
-#         (5, models.layers.AbsActivation()), 
-#         (5, models.layers.GaussActivation(5))
-#     ]),
-#     nn.Linear(20, y.shape[1] if len(y.shape) > 1 else 1),
-#     nn.Sigmoid()
-# ])
-# model = models.generic.GenericNetwork()
-# model.hidden_layers.extend([
-#     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
-#     nn.Linear(2, 5),
-#     models.layers.AbsActivation(),
-#     nn.Linear(5, 5),
-#     models.layers.AbsActivation(),
-#     nn.Linear(5, 5),
-#     models.layers.AbsActivation(),
-#     nn.Linear(5, y.shape[1] if len(y.shape) > 1 else 1),
-#     nn.Sigmoid()
-# ])
-# model = models.feedforward.FeedForwardNetwork(
-#     input_dim=X.shape[1] if len(X.shape) > 1 else 1, 
-#     output_dim=y.shape[1] if len(y.shape) > 1 else 1,
-#     layer_spec=[5]
-# )
 model = models.generic.GenericNetwork()
 model.hidden_layers.extend([
     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
-    nn.Linear(2, 5),
-    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
-    nn.Linear(5, 10),
-    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
-    nn.Linear(10, 5),
-    models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU()]),
-    nn.Linear(5, 2),
+    nn.Linear(2, 6),
+    models.layers.CompositeActivation([models.layers.SquareActivation()]),
+    nn.Linear(6, 12),
+    models.layers.CompositeActivation([models.layers.SquareActivation()]),
+    nn.Linear(12, 6),
+    models.layers.CompositeActivation([models.layers.SquareActivation()]),
+    nn.Linear(6, 2),
     nn.Sigmoid()
 ])
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 utils.train_model(
     model=model,
@@ -134,7 +100,7 @@ def plot_layer_outputs(model, X, y):
         
         if output_dim > 2:
             # Apply PCA to reduce the dimensionality to 2D
-            pca = PCA(n_components=2)
+            pca = PCA(n_components=3)
             transformed_output = pca.fit_transform(output_np)
             explained_variance = sum(pca.explained_variance_ratio_) * 100
             
@@ -195,4 +161,40 @@ def plot_layer_outputs(model, X, y):
 
 
         
+#plot_layer_outputs(model, X, y)
+
+
+def plot_decision_boundary(model, X, y):
+    """
+    Plots the decision boundary of the model against the dataset.
+    """
+    # Create a grid of points
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.01),
+                         np.arange(y_min, y_max, 0.01))
+    
+    # Flatten the grid and predict
+    grid = np.c_[xx.ravel(), yy.ravel()]
+    grid_tensor = torch.Tensor(grid)
+    with torch.no_grad():
+        Z = model(grid_tensor).detach().cpu().numpy()
+    Z = np.argmax(Z, axis=1)
+    Z = Z.reshape(xx.shape)
+    
+    # Plot
+    plt.contourf(xx, yy, Z, alpha=0.8, cmap='viridis')
+    plt.scatter(X[:, 0], X[:, 1], c=torch.argmax(y, axis=1).numpy(), edgecolor='k', cmap='viridis')
+    plt.title("Decision Boundary")
+    plt.xlabel("Feature 1")
+    plt.ylabel("Feature 2")
+    plt.show()
+
+# Plot the layer outputs
 plot_layer_outputs(model, X, y)
+
+# Plot the decision boundary
+if X.shape[1] == 2:  # Ensure data is 2D for decision boundary visualization
+    plot_decision_boundary(model, X, y)
+else:
+    print("Decision boundary plot only supported for 2D data.")
