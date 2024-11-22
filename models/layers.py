@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 def layer_spec(spec, input_dim, final_dim=None):
     """
@@ -100,6 +101,12 @@ class AbsActivation(nn.Module):
     def forward(self, x):
         return torch.abs(x)
     
+class AbsActivation(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    def forward(self, x):
+        return torch.sin(x)
+    
 class GaussActivation(nn.Module):
     def __init__(self, num_features) -> None:
         super().__init__()
@@ -108,6 +115,88 @@ class GaussActivation(nn.Module):
     def forward(self, x):
         z = (x - self.m) / self.s
         return torch.exp(-torch.pow(z, 2))    
+
+# UNTESTED
+class ReciprocalActivation(nn.Module):
+    """
+    Implements the activation function: f(x) = sgn(x) / sqrt(x^2 + a)
+    """
+    def __init__(self, value_cap: float = 10) -> None:
+        """
+
+        Args:
+            epsilon (float): Prevents exploding gradients by effectively "capping" the maximum magnitude of the function.
+        """
+        super().__init__()
+        self.a = 1 / value_cap
+    
+    def forward(self, x):
+        sign_x = torch.sign(x)
+        sqrt_term = torch.sqrt(x**2 + self.a)
+        return sign_x / sqrt_term
+
+# UNTESTED
+class InteractionMechanism(nn.Module):
+    def __init__(self, input_dim: int, embed_dim: int) -> None:
+        super().__init__()
+        self.embed = nn.Linear(input_dim, embed_dim)
+        self.interaction_weights = nn.Linear(input_dim, embed_dim)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, input_dim).
+
+        Returns:
+            torch.Tensor: Interaction output of shape (batch_size, embed_dim).
+        """
+        embed: torch.Tensor = self.embed(x) # (batch_size, embed_dim)
+        # Outer Product
+        outer_product = embed.unsqueeze(2) * embed.unsqueeze(1) # (batch_size, embed_dim, embed_dim)
+        # Weight each column in the outer product
+        res = outer_product * self.interaction_weights(x) # (batch_size, embed_dim)
+        return res
+
+# UNTESTED
+class FeatureAttention(nn.Module):
+    """
+    Implements a scaled dot-product attention mechanism for non-sequential data.
+    """
+    def __init__(self, input_dim: int, embed_dim: int) -> None:
+        """
+        Args:
+            input_dim (int): Dimension of the input features.
+            embed_dim (int): Dimension of the query, key, and value embeddings.
+        """
+        super().__init__()
+        self.query = nn.Linear(input_dim, embed_dim)
+        self.key = nn.Linear(input_dim, embed_dim)
+        self.value = nn.Linear(input_dim, embed_dim)
+        self.scale = torch.sqrt(torch.tensor(embed_dim, dtype=torch.float32))
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, input_dim).
+
+        Returns:
+            torch.Tensor: Attention output of shape (batch_size, embed_dim).
+        """
+        # Compute query, key, and value vectors
+        Q = self.query(x)  # (batch_size, embed_dim)
+        K = self.key(x)    # (batch_size, embed_dim)
+        V = self.value(x)  # (batch_size, embed_dim)
+        
+        # Compute scaled dot-product attention scores
+        scores = torch.matmul(Q, K.transpose(-1, -2)) / self.scale  # (batch_size, 1)
+        
+        # Apply softmax to normalize scores (though scores will likely just be a scalar in this context)
+        attention_weights = F.softmax(scores, dim=-1)  # (batch_size, 1)
+        
+        # Compute attention-weighted values
+        attention_output = attention_weights * V  # (batch_size, embed_dim)
+        
+        return attention_output
 
 class LinearTransformLayer(nn.Module):
     def __init__(self, num_features):
