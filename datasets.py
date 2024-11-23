@@ -219,6 +219,36 @@ def plot_model_predictions(model, X, y, title='Model Predictions with Dataset Ov
     plt.tight_layout()
     plt.show()
 
+def generate_equation_dataset(equation, n_points=1000, range_x=(-10, 10), range_y=(-10, 10), seed=None):
+    """
+    Generate random points and evaluate an equation on them.
+
+    Parameters:
+    - equation: Callable function that takes a PyTorch tensor of shape (N, 2) as input.
+    - n_points: Number of random points to generate.
+    - range_x: Tuple (min, max) specifying the range of x values.
+    - range_y: Tuple (min, max) specifying the range of y values.
+    - seed: Optional random seed for reproducibility.
+
+    Returns:
+    - X: Torch tensor of shape (n_points, 2) containing the random points.
+    - y: Torch tensor of shape (n_points,) containing the evaluated values.
+    """
+    if seed is not None:
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+    # Generate random points in the specified range
+    x_values = np.random.uniform(range_x[0], range_x[1], n_points)
+    y_values = np.random.uniform(range_y[0], range_y[1], n_points)
+    points = torch.tensor(np.column_stack((x_values, y_values)), dtype=torch.float32)
+
+    # Evaluate the equation on the points
+    with torch.no_grad():
+        values = equation(points)
+
+    return points, values
+
 def generate_nested_spirals(n_points, n_classes, noise=0.5):
     """
     Generate nested spirals dataset.

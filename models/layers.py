@@ -101,11 +101,17 @@ class AbsActivation(nn.Module):
     def forward(self, x):
         return torch.abs(x)
     
-class AbsActivation(nn.Module):
+class WaveActivation(nn.Module):
     def __init__(self) -> None:
         super().__init__()
     def forward(self, x):
         return torch.sin(x)
+    
+class SquareWaveActivation(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    def forward(self, x):
+        return (torch.fmod(x, 2) < 1).float()
     
 class GaussActivation(nn.Module):
     def __init__(self, num_features) -> None:
@@ -320,7 +326,8 @@ class CompositeActivation(nn.Module):
 
         # Apply each module to its corresponding partition
         processed_partitions = [
-            module(partition) for module, partition in zip(self.module_list, partitions)
+            module(partition) if module is not None else partition
+            for module, partition in zip(self.module_list, partitions)
         ]
 
         # Concatenate the processed partitions to form the output

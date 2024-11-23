@@ -12,33 +12,42 @@ import models.feedforward
 import models.generic
 import utils
 
-#X, y = datasets.generate_concentric_circles(n_classes=2, noise=0.15)
-#X = torch.Tensor(X) + 15
-X, y = datasets.generate_sine_wave()
+def custom_equation(tensor):
+    # x^(1/3) - y^(2/3)
+    # x^2 + y^2
+    # e^-(x^2y^2)
+    # sin(sqrt(x^2 + y^2))
+    # x/y
+    x, y = tensor[:, 0], tensor[:, 1]
+
+    return torch.sqrt(torch.pow(x, 2) + torch.pow(y, 2))
+
+X, y = datasets.generate_equation_dataset(custom_equation)
 X = torch.Tensor(X)
 y = torch.Tensor(y)
 
 datasets.plot_dataset(X, y)
 
-y = torch.stack((y == 0, y == 1), dim=1).float()
+# y = torch.stack((y == 0, y == 1), dim=1).float()
 
 dataset = TensorDataset(X, y)
 dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 
 model = models.generic.GenericNetwork()
+def get_activation():
+    return models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU(), models.layers.SquareActivation()])
 model.hidden_layers.extend([
     models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
     nn.Linear(2, 6),
-    models.layers.CompositeActivation([models.layers.SquareActivation()]),
+    get_activation(),
     nn.Linear(6, 12),
-    models.layers.CompositeActivation([models.layers.SquareActivation()]),
+    get_activation(),
     nn.Linear(12, 6),
-    models.layers.CompositeActivation([models.layers.SquareActivation()]),
-    nn.Linear(6, 2),
-    nn.Sigmoid()
+    get_activation(),
+    nn.Linear(6, 1)
 ])
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.SmoothL1Loss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 utils.train_model(
@@ -133,15 +142,41 @@ def plot_layer_outputs(model, X, y):
         
         elif output_dim == 1:
             # Overlaid histograms for 1D output
-            output_class_0 = y
-            output_class_1 = output_np
-            
-            ax.hist(output_class_0.squeeze(), bins=30, alpha=0.7, color='blue', label='Class 0', edgecolor='black')
-            ax.hist(output_class_1.squeeze(), bins=30, alpha=0.7, color='orange', label='Class 1', edgecolor='black')
-            ax.set_title(f"Layer {idx} ({layer_class_name}) - 1D Output")
-            ax.set_xlabel("Output Value")
-            ax.set_ylabel("Frequency")
+            scatter = ax.scatter(
+                y, 
+                output_np, 
+                c=y, 
+                cmap='viridis', 
+                alpha=0.6
+            )
+            ax.set_title(f"Layer {idx} ({layer_class_name}) - 2D Output")
+            ax.set_xlabel("Ground Truth")
+            ax.set_ylabel("Predicted")
+            ax.grid(True)
+
+            # Overlay a red dashed line along x = y
+            min_val = min(ax.get_xlim()[0], ax.get_ylim()[0])  # Get the lower bound
+            max_val = max(ax.get_xlim()[1], ax.get_ylim()[1])  # Get the upper bound
+            #ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label="x = y")
+
+            # Ensure the limits are consistent for better visualization
+            # ax.set_xlim(min_val, max_val)
+            # ax.set_ylim(min_val, max_val)
+
+            # Optional: Add a legend
             ax.legend()
+
+            # Display the plot
+            plt.show()
+            # output_class_0 = y
+            # output_class_1 = output_np
+            
+            # ax.hist(output_class_0.squeeze(), bins=30, alpha=0.7, color='blue', label='Class 0', edgecolor='black')
+            # ax.hist(output_class_1.squeeze(), bins=30, alpha=0.7, color='orange', label='Class 1', edgecolor='black')
+            # ax.set_title(f"Layer {idx} ({layer_class_name}) - 1D Output")
+            # ax.set_xlabel("Output Value")
+            # ax.set_ylabel("Frequency")
+            # ax.legend()
         
         else:
             ax.text(0.5, 0.5, "Unsupported Dim", horizontalalignment='center', verticalalignment='center')
@@ -184,7 +219,7 @@ def plot_decision_boundary(model, X, y):
     
     # Plot
     plt.contourf(xx, yy, Z, alpha=0.8, cmap='viridis')
-    plt.scatter(X[:, 0], X[:, 1], c=torch.argmax(y, axis=1).numpy(), edgecolor='k', cmap='viridis')
+    plt.scatter(X[:, 0], X[:, 1], c=y.numpy(), edgecolor='k', cmap='viridis')
     plt.title("Decision Boundary")
     plt.xlabel("Feature 1")
     plt.ylabel("Feature 2")
