@@ -11,6 +11,7 @@ import models.layers
 import models.feedforward
 import models.generic
 import utils
+import copy
 
 def custom_equation(tensor):
     # x^(1/3) - y^(2/3)
@@ -35,9 +36,9 @@ dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True)
 
 model = models.generic.GenericNetwork()
 def get_activation():
-    return models.layers.CompositeActivation([models.layers.AbsActivation(), nn.ReLU(), models.layers.SquareActivation()])
+    return models.layers.CompositeActivation([nn.ReLU(), models.layers.AbsActivation(), models.layers.ReciprocalActivation()])
 model.hidden_layers.extend([
-    models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
+    #models.layers.LinearTransformLayer(X.shape[1] if len(X.shape) > 1 else 1),
     nn.Linear(2, 6),
     get_activation(),
     nn.Linear(6, 12),
@@ -47,8 +48,10 @@ model.hidden_layers.extend([
     nn.Linear(6, 1)
 ])
 
-criterion = nn.SmoothL1Loss()
+criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+initial_weights = copy.deepcopy(model.state_dict())
 
 utils.train_model(
     model=model,
@@ -61,15 +64,131 @@ utils.train_model(
 )
 model.eval()
 
-for name, param in model.named_parameters():
-    print(name, param.shape, param)
+
+total_loss = 0
+with torch.no_grad():
+    for inputs, targets in dataloader:
+        inputs, targets = inputs, targets
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        total_loss += loss.item()
+baseline_loss = total_loss / len(dataloader)
+
+trained_weights = copy.deepcopy(model.state_dict())
+
+reset_loss = {}
+rand_loss = {}
+zero_loss = {}
+one_loss = {}
+for name, t_params in trained_weights.items():
+    i_params = initial_weights[name]
+    diff = torch.linalg.vector_norm(t_params - i_params, ord=2)
+    reset_loss[name] = diff
+    
+    # Reset to initial weights
+    new_state = copy.deepcopy(trained_weights)
+    new_state[name] = initial_weights[name]
+    model.load_state_dict(new_state)
+    
+    total_loss = 0
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs, targets = inputs, targets
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            total_loss += loss.item()
+    loss = total_loss / len(dataloader)
+
+    reset_loss[name] = loss
+    
+    # Set to random
+    new_state = copy.deepcopy(trained_weights)
+    new_state[name] = torch.randn(new_state[name].shape)
+    model.load_state_dict(new_state)
+    
+    total_loss = 0
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs, targets = inputs, targets
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            total_loss += loss.item()
+    loss = total_loss / len(dataloader)
+
+    rand_loss[name] = loss
+    
+    # Set to 0
+    new_state = copy.deepcopy(trained_weights)
+    new_state[name] = torch.zeros(new_state[name].shape)
+    model.load_state_dict(new_state)
+    
+    total_loss = 0
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs, targets = inputs, targets
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            total_loss += loss.item()
+    loss = total_loss / len(dataloader)
+
+    zero_loss[name] = loss
+    
+    # Set to 1
+    new_state = copy.deepcopy(trained_weights)
+    new_state[name] = torch.ones(new_state[name].shape)
+    model.load_state_dict(new_state)
+    
+    total_loss = 0
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs, targets = inputs, targets
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            total_loss += loss.item()
+    loss = total_loss / len(dataloader)
+
+    one_loss[name] = loss
 
 import matplotlib as mpl
 mpl.rcParams['figure.dpi'] = 80
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from sklearn.decomposition import PCA
 import numpy as np
 import math
+from matplotlib.colors import Normalize
+
+plt.figure(figsize=(10, 6))
+# Parameters for the bar chart
+layers = list(reset_loss.keys())
+x = np.arange(len(layers))  # Positions for the layers
+bar_width = 0.2  # Width of each bar
+
+# Values for each loss type
+reset_values = list(reset_loss.values())
+rand_values = list(rand_loss.values())
+zero_values = list(zero_loss.values())
+one_values = list(one_loss.values())
+
+# Create side-by-side bar chart
+plt.figure(figsize=(10, 6))
+plt.bar(x - 1.5 * bar_width, reset_values, width=bar_width, color='blue', label='Reset Loss')
+plt.bar(x - 0.5 * bar_width, rand_values, width=bar_width, color='green', label='Random Loss')
+plt.bar(x + 0.5 * bar_width, zero_values, width=bar_width, color='orange', label='Zero Loss')
+plt.bar(x + 1.5 * bar_width, one_values, width=bar_width, color='purple', label='One Loss')
+plt.xticks(x, layers)  # Align x-axis ticks with layers
+
+plt.axhline(baseline_loss, color='red', linestyle='--', linewidth=2, label=f"Baseline: {baseline_loss:.2f}")
+
+plt.ylabel("Criticality")
+plt.ylim(0, baseline_loss*10)
+plt.xlabel("Layer")
+plt.title("Criticality of Layers to Parameter Resetting")
+plt.tight_layout()
+plt.legend()
+
+# Show the plot
+plt.show()
 
 # y_pred = model(X)
 # plt.plot(X, c=y_pred, cmap='viridis', alpha=0.6)
